@@ -1,0 +1,4 @@
+# ninja log v7
+25	136	7934821806442845	CMakeFiles/outputFile.dir/sources/main.c.obj	2b4250d138369c51
+32	694	7934821806503083	CMakeFiles/outputFile.dir/sources/software_timer.c.obj	4a9890fec5ce041a
+696	856	7934821813145893	bin/outputFile.exe	3ee7d53978b4c30f

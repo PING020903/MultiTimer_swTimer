@@ -1,0 +1,14 @@
+[
+{
+  "directory": "F:/cmake_study/swTimer/build",
+  "command": "F:\\llvm-mingw-20220906-msvcrt-i686\\bin\\cc.exe -IF:/cmake_study/swTimer/include -g -o CMakeFiles\\outputFile.dir\\sources\\main.c.obj -c F:\\cmake_study\\swTimer\\sources\\main.c",
+  "file": "F:/cmake_study/swTimer/sources/main.c",
+  "output": "F:/cmake_study/swTimer/build/CMakeFiles/outputFile.dir/sources/main.c.obj"
+},
+{
+  "directory": "F:/cmake_study/swTimer/build",
+  "command": "F:\\llvm-mingw-20220906-msvcrt-i686\\bin\\cc.exe -IF:/cmake_study/swTimer/include -g -o CMakeFiles\\outputFile.dir\\sources\\software_timer.c.obj -c F:\\cmake_study\\swTimer\\sources\\software_timer.c",
+  "file": "F:/cmake_study/swTimer/sources/software_timer.c",
+  "output": "F:/cmake_study/swTimer/build/CMakeFiles/outputFile.dir/sources/software_timer.c.obj"
+}
+]

@@ -172,7 +172,7 @@ typedef struct {
  */
 #define swTimer_setPeriodic(_pCfg, _STATUS) \
     do{\
-        _pCfg->status.periodic = _STATUS;\
+        (_pCfg)->status.periodic = _STATUS;\
     }while(0)
 
 /**
@@ -192,7 +192,7 @@ typedef struct {
  */
 #define swTimer_setPticks(_pCfg, _p)\
     do{\
-        _pCfg->status.pTicks = _p;\
+        (_pCfg)->status.pTicks = _p;\
     }while(0)
 
 /**
@@ -209,7 +209,7 @@ typedef struct {
  */
 #define swTimer_setRunStatus(_pCfg, _STATUS)                                   \
   do {                                                                         \
-    _pCfg->status.runStatus = _STATUS;                                         \
+    (_pCfg)->status.runStatus = _STATUS;                                         \
   } while (0)
 
 /**

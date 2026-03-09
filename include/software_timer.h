@@ -50,36 +50,42 @@ typedef void (*swTimerCB_t)(void* userData);
 /**
  * @def SWTIMER_RUN
  * @brief 定时器运行状态标志（启用）
+ * @note 用于 swTimer_setRunStatus() 函数，表示启动定时器
  */
 #define SWTIMER_RUN true
 
 /**
  * @def SWTIMER_STOP
  * @brief 定时器停止状态标志（禁用）
+ * @note 用于 swTimer_setRunStatus() 函数，表示停止定时器
  */
 #define SWTIMER_STOP false
 
 /**
  * @def SWTIMER_ONCE
  * @brief 单次触发模式，定时器到期后自动停止
+ * @note 用于 swTimer_setPeriodic() 函数，表示定时器只触发一次
  */
 #define SWTIMER_ONCE false
 
 /**
  * @def SWTIMER_PERIODIC
  * @brief 周期性触发模式，定时器到期后自动重载
+ * @note 用于 swTimer_setPeriodic() 函数，表示定时器周期性触发
  */
 #define SWTIMER_PERIODIC true
 
 /**
  * @def SWTIMER_INVALID_HANDLE
  * @brief 无效句柄值，表示定时器未创建或已删除
+ * @note 用于判断句柄有效性，返回此值表示操作失败
  */
 #define SWTIMER_INVALID_HANDLE -1
 
 /**
  * @def SWTIMER_INIT_HANDLE
  * @brief 初始化句柄值，表示定时器槽位空闲
+ * @note 用于标识未使用的定时器槽位
  */
 #define SWTIMER_INIT_HANDLE 0
 
@@ -201,10 +207,28 @@ typedef struct {
  * swTimer_setRunStatus(&timer, SWTIMER_RUN);
  * @endcode
  */
-#define swTimer_setRunStatus(_pCfg, _STATUS) \
-    do{\
-        _pCfg->status.runStatus = _STATUS;\
-    }while(0)
+#define swTimer_setRunStatus(_pCfg, _STATUS)                                   \
+  do {                                                                         \
+    _pCfg->status.runStatus = _STATUS;                                         \
+  } while (0)
+
+/**
+ * @def swTimer_resetTicks(_pCfg)
+ * @brief 重置定时器的当前嘀嗒计数器为 0
+ * @param _pCfg 定时器配置结构体指针
+ * 
+ * @note 调用后定时器会立即触发（下次 swTimer_mainLoop() 时）
+ * @warning 慎用此宏，可能导致定时器行为不符合预期
+ * 
+ * @par 示例:
+ * @code
+ * swTimer_resetTicks(&timer);
+ * @endcode
+ */
+#define swTimer_resetTicks(_pCfg)  \
+    do {                           \
+        (_pCfg)->status.ticks = 0; \
+    } while (0)
 
 /**
  * @brief 创建并注册一个新的定时器

@@ -1,6 +1,14 @@
 #include "DBG_macro.h"
 #include "software_timer.h"
 
+/**
+ * @file software_timer.c
+ * @brief 软件定时器模块的实现文件
+ * 
+ * 实现了多路软件定时器的创建、管理、调度和删除功能。
+ * 支持单次触发和周期性触发模式，通过回调函数机制实现定时任务。
+ */
+
 #ifndef I32_MAX
 #define I32_MAX 0b01111111111111111111111111111111
 #endif
@@ -13,17 +21,44 @@
 #define MIN(x, y) (((x) > (y))? (y) : (x))
 #endif
 
+/**
+ * @struct swTimerBond_t
+ * @brief 定时器绑定结构体（内部使用）
+ * 
+ * 用于将句柄与定时器信息关联起来，建立句柄到定时器配置的映射关系。
+ * 该结构体仅在内部管理使用，不对外暴露。
+ * 
+ * @see timerHandleList
+ */
 typedef struct {
-    swTimerHandle_t handle;
-    swTimer_t* timerInfo;
-}swTimerBond_t;
+    swTimerHandle_t handle;    ///< 定时器句柄，用于唯一标识定时器
+    swTimer_t* timerInfo;      ///< 指向定时器配置结构体的指针
+} swTimerBond_t;
 
+/// @brief 全局定时器句柄列表，存储所有已创建的定时器
 static swTimerBond_t timerHandleList[TIMER_MAX_COUNT] = { 0 };
 
 #if (SW_LoopAndTickSynchronization == true)
+/// @brief 同步标志位，用于确保 mainLoop 和 updateTick 的调用顺序
 static volatile unsigned int syncFlag = 0U;
 #endif
 
+/**
+ * @brief 检查句柄是否为空或已被注册
+ * 
+ * 遍历定时器列表，检查给定的句柄是否已经在系统中存在。
+ * 用于防止重复注册相同的句柄。
+ * 
+ * @param current 待检查的句柄指针
+ * 
+ * @return bool 检查结果：
+ *         - true: 句柄为空或未被注册（可以使用）
+ *         - false: 句柄已被注册（不可使用）
+ * 
+ * @note 如果 current 为 NULL，直接返回 true
+ * 
+ * @see swTimer_cfgCheck()
+ */
 static bool swTimer_checkHandle(const swTimerHandle_t* current) {
     if (!current) return true;
     for (int i = 0; i < TIMER_MAX_COUNT; i++) {
@@ -32,6 +67,19 @@ static bool swTimer_checkHandle(const swTimerHandle_t* current) {
     return true;
 }
 
+/**
+ * @brief 获取一个空闲的定时器槽位
+ * 
+ * 遍历定时器列表，查找一个未被使用的定时器槽位。
+ * 槽位空闲的判断标准是句柄为 SWTIMER_INIT_HANDLE 或 SWTIMER_INVALID_HANDLE。
+ * 
+ * @return swTimerBond_t* 找到的空闲定时器槽位指针
+ * @retval NULL 所有定时器槽位都已占用，无可用资源
+ * 
+ * @note 该函数不会修改定时器状态，仅进行检查
+ * 
+ * @see swTimer_createTimer()
+ */
 static swTimerBond_t* swTimer_getFreeTimer(void) {
     for (int i = 0; i < TIMER_MAX_COUNT; i++) {
         if (timerHandleList[i].handle == SWTIMER_INIT_HANDLE ||
@@ -42,41 +90,82 @@ static swTimerBond_t* swTimer_getFreeTimer(void) {
     return NULL;
 }
 
+/**
+ * @brief 生成一个新的唯一句柄值
+ * 
+ * 通过以下策略生成新的句柄：
+ * 1. 首先尝试使用当前最大句柄值 + 1
+ * 2. 如果达到 I32_MAX 边界，则从头搜索未使用的句柄值
+ * 
+ * @return swTimerHandle_t 新生成的句柄值
+ * @retval SWTIMER_INVALID_HANDLE 无法找到可用的句柄值（理论上不会发生）
+ * 
+ * @note 句柄值从 1 开始递增，0 和负值为特殊值（无效或初始化状态）
+ * @warning 在极端情况下（所有句柄值都被占用），可能返回无效句柄
+ * 
+ * @see swTimer_createTimer()
+ */
 static swTimerHandle_t swTimer_getNewHandle(void) {
     swTimerHandle_t maxHandleNum = SWTIMER_INVALID_HANDLE;
+    // 查找当前最大的句柄值
     for (int i = 0; i < TIMER_MAX_COUNT; i++) {
         maxHandleNum = MAX(timerHandleList[i].handle, maxHandleNum);
     }
-    if (maxHandleNum <= I32_MAX) { // 尚未到达I32边界, 直接返回
+    
+    if (maxHandleNum <= I32_MAX) { // 尚未到达 I32 边界，直接递增返回
         maxHandleNum++;
         return maxHandleNum;
     }
 
-    maxHandleNum = 1; // 找空闲的handle值
+    // 达到边界，需要查找空闲的句柄值
+    maxHandleNum = 1; // 从 1 开始查找
     for (maxHandleNum = 1; maxHandleNum < I32_MAX; maxHandleNum++) {
         int pos;
         for (pos = 0; pos < TIMER_MAX_COUNT; pos++) {
-            if (timerHandleList[pos].handle <= SWTIMER_INIT_HANDLE) continue; // 当前定时器无效, 跳过
-            if (timerHandleList[pos].handle == maxHandleNum) break; // 当前handle值已被占用, 结束比较
+            if (timerHandleList[pos].handle <= SWTIMER_INIT_HANDLE) continue; // 当前定时器无效，跳过
+            if (timerHandleList[pos].handle == maxHandleNum) break; // 当前句柄值已被占用，结束比较
         }
-        if (pos == TIMER_MAX_COUNT) return maxHandleNum; // 当前handle值多次对比后, 无发现占用
+        if (pos == TIMER_MAX_COUNT) return maxHandleNum; // 当前句柄值未被占用，可以返回
     }
 
-    return SWTIMER_INVALID_HANDLE;
+    return SWTIMER_INVALID_HANDLE; // 找不到可用句柄
 }
 
+/**
+ * @brief 验证定时器配置参数的合法性
+ * 
+ * 对传入的定时器配置进行全面检查，包括：
+ * - 配置结构体指针是否为空
+ * - 句柄是否已被注册
+ * - 超时嘀嗒数是否有效
+ * - 回调函数是否已注册（仅警告）
+ * 
+ * @param cfg 定时器配置结构体指针
+ * 
+ * @return int 检查结果：
+ *         - @ref SWTIMER_OK : 配置合法
+ *         - @ref SWTIMER_ERR_ARG : 参数为空
+ *         - @ref SWTIMER_ERR_FAIL : 句柄已注册或 pTicks 无效
+ *         - @ref SWTIMER_OK : 其他情况（即使回调未注册也返回成功）
+ * 
+ * @note 如果回调函数未注册，会打印警告但依然返回成功
+ * @warning pTicks 必须指向有效的内存地址且值不能为 0
+ * 
+ * @see swTimer_createTimer()
+ */
 static int swTimer_cfgCheck(const swTimer_t* cfg) {
     if (!cfg) return SWTIMER_ERR_ARG;
 
-    if (swTimer_checkHandle(cfg->handle) == false) { // 该句柄非空且已被注册
+    if (swTimer_checkHandle(cfg->handle) == false) { // 句柄已被注册
         return SWTIMER_ERR_FAIL;
     }
 
-
+    // 检查超时嘀嗒数配置
     if (cfg->status.pTicks == NULL ||
-        *(cfg->status.pTicks) == 0U) return SWTIMER_ERR_FAIL; // 未设置嘀嗒超时
+        *(cfg->status.pTicks) == 0U) return SWTIMER_ERR_FAIL;
 
-    if (cfg->cb == NULL) { // 提示警告: 未注册回调函数
+    // 检查回调函数（可选）
+    if (cfg->cb == NULL) {
         DEBUG_PRINT("this callback is not register.");
     }
     return SWTIMER_OK;
@@ -166,22 +255,48 @@ int swTimer_mainLoop(void) {
 /********************************************************/
 #if SWTIMER_TEST_WINDOWS
 #include "Windows.h"
-// 全局变量
-static unsigned int tick_10ms = 10;    // 10ms定时
-static unsigned int tick_100ms = 100;  // 100ms定时
-static unsigned int tick_1s = 1000;    // 1s定时
 
-volatile unsigned int system_ticks = 0; // 系统滴答计数
+/// @brief 10ms 定时器的超时嘀嗒数
+static unsigned int tick_10ms = 10;
 
-// 测试用回调函数
+/// @brief 100ms 定时器的超时嘀嗒数
+static unsigned int tick_100ms = 100;
+
+/// @brief 1s 定时器的超时嘀嗒数
+static unsigned int tick_1s = 1000;
+
+/// @brief 系统滴答计数器，记录经过的毫秒数
+volatile unsigned int system_ticks = 0;
+
+/**
+ * @brief 10ms 定时器的测试回调函数
+ * 
+ * 当 10ms 定时器超时时被调用，打印调试信息。
+ * 
+ * @param userData 用户数据指针，期望是 int 类型的指针
+ */
 void timer_callback_10ms(void* userData) {
     printf("[10ms] Timer triggered! Data: %d\n", *(int*)userData);
 }
 
+/**
+ * @brief 100ms 定时器的测试回调函数
+ * 
+ * 当 100ms 定时器超时时被调用，打印调试信息。
+ * 
+ * @param userData 用户数据指针，期望是 int 类型的指针
+ */
 void timer_callback_100ms(void* userData) {
     DEBUG_PRINT("[100ms] Timer triggered! Data: %d", *(int*)userData);
 }
 
+/**
+ * @brief 1s 定时器的测试回调函数
+ * 
+ * 当 1s 定时器超时时被调用，打印调试信息。
+ * 
+ * @param userData 用户数据指针，期望是 int 类型的指针
+ */
 void timer_callback_1s(void* userData) {
     DEBUG_PRINT("[1s] Timer triggered! Data: %d", *(int*)userData);
 }
@@ -223,11 +338,24 @@ swTimer_t timer3 = {
     }
 };
 
-// 系统定时器回调
+/**
+ * @brief 系统定时器回调函数（Windows 专用）
+ * 
+ * 由 Windows 系统定时器触发，每 1ms 调用一次。
+ * 负责更新系统滴答计数并调用软件定时器更新函数。
+ * 
+ * @param hwnd 窗口句柄（未使用）
+ * @param uMsg 消息标识符（未使用）
+ * @param idEvent 定时器 ID（未使用）
+ * @param dwTime 系统时间（未使用）
+ * 
+ * @note 该函数在中断上下文中执行，应尽量避免耗时操作
+ */
 VOID CALLBACK SystemTimerProc(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
     system_ticks++;
     swTimer_updateTick();
 }
+
 void swTimer_test(void) {
     // 初始化定时器
     if (swTimer_createTimer(&timer1) != SWTIMER_OK) {
